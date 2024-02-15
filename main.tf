@@ -54,8 +54,28 @@ resource "aws_route" "localr" {
   route_table_id            =  data.aws_route_table.local_main.id
   destination_cidr_block    = "0.0.0.0/0"
   gateway_id                = aws_internet_gateway.local.id
+  //depends_on                = [aws_vpc.local]
+}
+
+resource "aws_route" "local_tgw" {
+  //route_table_id            = aws_route_table.localr.id
+  route_table_id            =  data.aws_route_table.local_main.id
+  destination_cidr_block    = "11.0.0.0/16"
+  transit_gateway_id        = aws_ec2_transit_gateway.local-tgw.id
   //depends_on                = [aws_route_table.localr]
 }
+
+data "aws_route_table" "remote_main" {
+  vpc_id = aws_vpc.remote.id
+}
+
+resource "aws_route" "remote_tgw" {
+  route_table_id            =  data.aws_route_table.remote_main.id
+  destination_cidr_block    = "10.0.0.0/16"
+  transit_gateway_id        = aws_ec2_transit_gateway.remote-tgw.id
+  //depends_on                = [aws_vpc.remote]
+}
+
 
 resource "aws_vpc" "remote" {
   cidr_block = "11.0.0.0/16"
@@ -195,6 +215,7 @@ data "aws_ec2_transit_gateway_peering_attachment" "local_to_remote" {
 resource "aws_ec2_transit_gateway_vpc_attachment_accepter" "from_local" {
   //transit_gateway_attachment_id = aws_ec2_transit_gateway_peering_attachment.remote_to_local.id
   transit_gateway_attachment_id = data.aws_ec2_transit_gateway_peering_attachment.local_to_remote.id
+  depends_on = [aws_ec2_transit_gateway.local-tgw.id]
 
   tags = {
     Name = "TGW Peering Accept local"
@@ -202,14 +223,39 @@ resource "aws_ec2_transit_gateway_vpc_attachment_accepter" "from_local" {
   }
 }
 */
+
+data "aws_ec2_transit_gateway_route_table" "local" {
+  filter {
+    name   = "default-association-route-table"
+    values = ["true"]
+  }
+
+  filter {
+    name   = "transit-gateway-id"
+    values = [aws_ec2_transit_gateway.local-tgw.id]
+  }
+}
+
 resource "aws_ec2_transit_gateway_route" "local" {
   destination_cidr_block         = "11.0.0.0/16"
-  transit_gateway_attachment_id  = aws_ec2_transit_gateway_vpc_attachment.local1.id
-  transit_gateway_route_table_id = aws_ec2_transit_gateway_peering_attachment.remote_to_local.id
+  transit_gateway_attachment_id  = data.aws_ec2_transit_gateway_peering_attachment.local_to_remote.id
+  transit_gateway_route_table_id = data.aws_ec2_transit_gateway_route_table.local.id
+}
+
+data "aws_ec2_transit_gateway_route_table" "remote" {
+  filter {
+    name   = "default-association-route-table"
+    values = ["true"]
+  }
+
+  filter {
+    name   = "transit-gateway-id"
+    values = [aws_ec2_transit_gateway.remote-tgw.id]
+  }
 }
 
 resource "aws_ec2_transit_gateway_route" "remote" {
   destination_cidr_block         = "10.0.0.0/16"
-  transit_gateway_attachment_id  = aws_ec2_transit_gateway_vpc_attachment.remote1.id
-  transit_gateway_route_table_id = aws_ec2_transit_gateway_peering_attachment.remote_to_local.id
+  transit_gateway_attachment_id  = aws_ec2_transit_gateway_peering_attachment.remote_to_local.id
+  transit_gateway_route_table_id = data.aws_ec2_transit_gateway_route_table.remote.id
 }
