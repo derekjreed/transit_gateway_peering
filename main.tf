@@ -188,6 +188,7 @@ resource "aws_ec2_transit_gateway" "peer" {
 data "aws_caller_identity" "current" {}
 data "aws_region" "current" {}
 
+/* In Module
 resource "aws_ec2_transit_gateway_peering_attachment" "remote_to_local" {
   peer_account_id         = data.aws_caller_identity.current.account_id
   peer_region             = data.aws_region.current.name
@@ -200,22 +201,40 @@ resource "aws_ec2_transit_gateway_peering_attachment" "remote_to_local" {
     Side = "Creator"
   }
 }
+*/
 
 # Transit Gateway 2's peering request needs to be accepted.
 # So, we fetch the Peering Attachment that is created for the Gateway 2.
 data "aws_ec2_transit_gateway_peering_attachment" "local_to_remote" {
-  depends_on = [aws_ec2_transit_gateway_peering_attachment.remote_to_local]
+  //depends_on = [module.tgw-peering.aws_ec2_transit_gateway_peering_attachment.remote_to_local]
   filter {
     name   = "transit-gateway-id"
     values = [aws_ec2_transit_gateway.local-tgw.id]
   }
+  filter {
+		name   = "state"
+		values = ["pendingAcceptance", "pending"]
+	}
+
+}
+
+// Module
+module "tgw-peering" {
+  source = "./modules/tgw-peering"
+  peer_account_id = data.aws_caller_identity.current.account_id
+  region = data.aws_region.current.name
+  peer_transit_gateway_id = aws_ec2_transit_gateway.local-tgw.id
+  transit_gateway_id = aws_ec2_transit_gateway.remote-tgw.id
+  
+  destination_cidr_block = [ "10.0.0.0/16", "12.0.0.0/16" ]
 }
 /*
-// Local accept
+// Local accept not working??
 resource "aws_ec2_transit_gateway_vpc_attachment_accepter" "from_local" {
   //transit_gateway_attachment_id = aws_ec2_transit_gateway_peering_attachment.remote_to_local.id
   transit_gateway_attachment_id = data.aws_ec2_transit_gateway_peering_attachment.local_to_remote.id
-  depends_on = [aws_ec2_transit_gateway.local-tgw.id]
+  //transit_gateway_attachment_id = "tgw-attach-01918eb9080fb16cc"
+  depends_on = [aws_ec2_transit_gateway.local-tgw]
 
   tags = {
     Name = "TGW Peering Accept local"
@@ -242,6 +261,7 @@ resource "aws_ec2_transit_gateway_route" "local" {
   transit_gateway_route_table_id = data.aws_ec2_transit_gateway_route_table.local.id
 }
 
+/* In Module
 data "aws_ec2_transit_gateway_route_table" "remote" {
   filter {
     name   = "default-association-route-table"
@@ -259,3 +279,4 @@ resource "aws_ec2_transit_gateway_route" "remote" {
   transit_gateway_attachment_id  = aws_ec2_transit_gateway_peering_attachment.remote_to_local.id
   transit_gateway_route_table_id = data.aws_ec2_transit_gateway_route_table.remote.id
 }
+*/
